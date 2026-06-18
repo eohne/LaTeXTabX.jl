@@ -14,7 +14,7 @@ package into another project without reading the source.
 
 ```julia
 using Pkg
-Pkg.add(url = "https://github.com/<owner>/LaTeXTabX.jl")   # not registered
+Pkg.add(url = "https://github.com/eohne/LaTeXTabX.jl")   # not registered
 # local dev: Pkg.develop(path = "path/to/RegressionTable_TabX")
 
 using LaTeXTabX
