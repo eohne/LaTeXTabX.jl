@@ -1,0 +1,57 @@
+{
+  "permissions": {
+    "additionalDirectories": [
+      "C:/Users/eohneberg/AppData/Local/Temp",
+      "C:/Windows/Temp",
+      "C:/Users/eohneberg/.claude/projects/c--Users-eohneberg-OneDrive-Julia-Packages-RegressionTable-TabX/memory"
+    ],
+    "allow": [
+      "Read(**)",
+      "Edit(**)",
+      "Write(**)",
+      "Read(C:/Users/eohneberg/AppData/Local/Temp/**)",
+      "Edit(C:/Users/eohneberg/AppData/Local/Temp/**)",
+      "Write(C:/Users/eohneberg/AppData/Local/Temp/**)",
+      "Read(C:/Windows/Temp/**)",
+      "Edit(C:/Windows/Temp/**)",
+      "Write(C:/Windows/Temp/**)",
+      "Read(C:/Users/eohneberg/.claude/projects/c--Users-eohneberg-OneDrive-Julia-Packages-RegressionTable-TabX/memory/**)",
+      "Edit(C:/Users/eohneberg/.claude/projects/c--Users-eohneberg-OneDrive-Julia-Packages-RegressionTable-TabX/memory/**)",
+      "Write(C:/Users/eohneberg/.claude/projects/c--Users-eohneberg-OneDrive-Julia-Packages-RegressionTable-TabX/memory/**)",
+      "Bash(julia *)",
+      "Bash(julia)",
+      "Bash(git *)",
+      "Bash(pdflatex *)",
+      "Bash(latexmk *)",
+      "Bash(R *)",
+      "Bash(R)",
+      "Bash(Rscript *)",
+      "Bash(R CMD *)",
+      "Bash(ls *)",
+      "Bash(ls)",
+      "Bash(cat *)",
+      "Bash(pwd)",
+      "Bash(echo *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(find *)",
+      "Bash(which *)",
+      "Bash(diff *)",
+      "Bash(sort *)",
+      "Bash(uniq *)",
+      "Bash(cd *)",
+      "Bash(true)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(rm -fr *)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git reset --hard *)",
+      "Bash(git clean *)"
+    ]
+  }
+}

@@ -1,0 +1,37 @@
+# --- Nested package fork: keep it in its OWN repo, never track/push it here ---
+RegressionTables_TabX.jl/
+
+# --- Claude Code: personal/local settings (machine-specific paths) ---
+.claude/settings.local.json
+
+# --- Julia ---
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+/docs/build/
+deps/deps.jl
+# Resolved env: keep the root Manifest out of VCS (library convention)
+/Manifest.toml
+
+# --- LaTeX build artifacts (keep the .tex, drop the build junk) ---
+*.aux
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.out
+*.toc
+
+# Compiled preview of the example tables (regenerate via latex/examples.tex)
+latex/
+
+# --- OS / editor junk ---
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+# Examples used for development
+examples/
+
+# Personal, machine-specific helpers (e.g. the R/alpaca bridge)
+personal/
