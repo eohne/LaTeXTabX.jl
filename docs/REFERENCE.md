@@ -92,11 +92,68 @@ latexreg(m1, m2, logit;
 
 | Keyword | Type / default | Meaning |
 |---|---|---|
-| `labels` | `AbstractDict` = `Dict()` | Map raw coefficient **and** response **and** FE/cluster names to display labels. Applies everywhere a name is shown. |
-| `keep` | `nothing` | Keep only these coefficients. `String`, `Regex`, or a vector of them. |
-| `drop` | `nothing` | Drop these coefficients (same forms). |
-| `order` | `nothing` | Force this leading order; remaining coefficients follow in first-seen order. |
-| `drop_intercept` | `Bool` = `false` | Also drop `(Intercept)`. **Intercept is kept by default.** |
+| `labels` | `Dict()` | Map raw coefficient / response / FE / cluster names to display labels. Keys match by **exact raw name only — no regex**. Default form is one `Dict` for the whole table; **per-column** form is a *vector of `Dict`s* (one per model, `nothing` = no relabel for that column). **Rows are keyed by the resolved display label** — see "Row identity" below. |
+| `keep` | `nothing` | Keep only matching coefficients (matched on **raw** names). One pattern, or a vector of patterns; `nothing` = keep all. **Per-column** form: a length-`nmodels` vector whose entries are each a *pattern-vector* or `nothing`. |
+| `drop` | `nothing` | Drop matching coefficients (matched on **raw** names). Same value forms as `keep` (incl. per-column vector-of-vectors). Applied after `keep`. |
+| `order` | `nothing` | Leading row order — **always global** (one pattern or a vector). Each pattern matches a row if it matches the row's display **label** *or* any raw name feeding it. Unmatched rows follow in first-seen order. |
+| `drop_intercept` | `Bool` = `false` | Also drop `(Intercept)`. **Intercept is kept by default**, and dropping it alone does **not** raise the Controls flag. |
+
+**Pattern semantics (`keep` / `drop` / `order`).** Every individual pattern is one of:
+
+| Pattern value | Matches a name when | Example |
+|---|---|---|
+| `String` | the name is **exactly equal** (`name == pat`) — *not* a substring | `keep = "treat"` matches only a coef literally named `treat` |
+| `Regex` | `occursin(pat, name)` — substring / pattern | `drop = [r"Intercept"]`, `keep = [r"^x"]`, `order = [r"treat"]` |
+| anything else | `name == string(pat)` (exact, after `string`) | `:treat` ≡ `"treat"` |
+
+A "vector of patterns" may mix `String` and `Regex` freely (e.g. `drop = [r"Intercept", "size"]`). For `keep`, the *match order of the patterns* sets the within-selection order before the global `order` is applied.
+
+> **Per-column `keep` / `drop`.** Disambiguation is by **element type, not length**: a
+> vector is treated as per-column **iff every element is itself a pattern-vector or
+> `nothing`** (e.g. `keep=[[r"^x"], nothing]`); a flat list of bare patterns
+> (`["x", r"y"]`) stays global. A per-column entry of `nothing` means "no
+> restriction for that column". A per-column-shaped vector **must have exactly one
+> entry per model** — the wrong length throws an `ArgumentError` (it is *not*
+> silently downgraded to a global list). `labels` in vector form likewise requires
+> one `Dict`/`nothing` per model. Rows are the union across columns; a per-column
+> spec can **mask** a coefficient out of specific columns even when that model
+> estimated it — a column that hides an estimated (non-intercept) regressor is
+> flagged in the auto **Controls** row.
+
+> **Row identity (coefficient merging).** Each coefficient row is keyed by its
+> **resolved display label**, not its raw name. Consequences: (1) different raw names
+> that resolve to the **same** label **merge onto one row** — each column fills its
+> own value (e.g. `x1_standard` in model A and `x1_nonstandard` in model B both
+> labelled `"X1"`, via a global `Dict("x1_standard"=>"X1","x1_nonstandard"=>"X1")` or
+> per-column dicts); (2) the **same** raw name given **different** labels per column
+> **splits** into separate rows (one per label, each filled only in its column). A
+> row with no label falls back to the LaTeX-escaped raw name as its key.
+
+> **`labels` is partial.** List only the names you want to rename; every coefficient
+> absent from the dict keeps its raw name (LaTeX-escaped: `_ & % #` → `\_ \& \% \#`,
+> so `log_gdp` renders as `log\_gdp`). Relabelled text is inserted **verbatim** (not
+> escaped), so it may hold math/markup like `"\$\\beta_1\$"`.
+
+**Worked examples.**
+
+```julia
+# rename only `treat`; lev, size, (Intercept) keep their raw names
+latexreg(m1, m2; labels = Dict("treat" => "Treatment"))
+
+# keep/drop by exact name vs regex
+latexreg(m1, m2; keep = [r"^x", "treat"])      # names starting with x, plus exactly "treat"
+latexreg(m1, m2; drop = [r"Intercept"])         # any name containing "Intercept"
+
+# order is global; matches a row's label OR a raw name feeding it
+latexreg(m1, m2; labels = Dict("treat" => "Treatment"), order = ["treat", "lev"])  # raw names
+latexreg(m1, m2; labels = Dict("treat" => "Treatment"), order = ["Treatment"])     # label
+
+# merge two differently-named regressors onto one "X1" row
+latexreg(mA, mB; labels = Dict("x1_standard" => "X1", "x1_nonstandard" => "X1"))
+
+# per-column keep: hide `treat` in column 1 only (flags Controls for column 1)
+latexreg(m1, m2; keep = [[r"^lev"], nothing])
+```
 
 ### Below-estimate line & stars
 
@@ -180,6 +237,7 @@ latexreg(m1, m2, logit;
 | `colspec` | `nothing` | Full LaTeX column spec; overrides `labelcol`/`coltype`. |
 | `coltype` | `String` = `"Y"` | Data-column type (`"X"`, `"c"`, `"S"`, `"D{.}{.}{-1}"`, …). |
 | `labelcol` | `String` = `"l"` | First (label) column type. |
+| `toprule` / `bottomrule` | `Symbol` = `:doublemid` | The outermost rules. `:doublemid` = the house `\midrule\midrule`; `:top` / `:bottom` = booktabs `\toprule` / `\bottomrule`; `:mid` = a single `\midrule`; `:none` omits the rule. Available on **every** builder. |
 | `file` | `nothing` | Also write the `.tex` to this path. |
 
 ---
@@ -260,7 +318,7 @@ Every builder compiles to these; you can also build or post-process tables by ha
 ```julia
 TabXCell(text; span=1, align=:l, multicol=false)   # text is final LaTeX
 TabXRow(cells::Vector{TabXCell})  |  TabXRow(cells...)
-TabXRule(kind::Symbol)            # :top | :mid | :doublemid | :bottom
+TabXRule(kind::Symbol)            # :top | :mid | :doublemid | :bottom | :none (renders nothing)
 TabXCmidRule(spans::Vector{Tuple{Int,Int}})         # \cmidrule(lr){a-b} …
 TabXRaw(latex::String)            # a verbatim line
 TabXTable(ncols; colspec="l"*"Y"^(ncols-1), width="\\textwidth", rows=[],
@@ -328,7 +386,7 @@ Refine the presentation by adding methods to these (own-function, no piracy) hoo
 | `LaTeXTabX._estimator(m)` | `String` | Estimator-row label. Default `""`. |
 | `LaTeXTabX._fixedeffects(m)` | `Vector{Pair{String,Bool}}` | Auto FE rows. Default empty. |
 | `LaTeXTabX._se_info(m)` | `(kind::Symbol, clustervars::Vector{String}, typelabel::String)` | SE detection. `kind ∈ (:simple,:robust,:cluster,:unknown)`; `typelabel` is a precise robust name (e.g. `"HC1"`) or `""`. Default `(:unknown, String[], "")`. |
-| `LaTeXTabX._regstat_ext(s::Symbol, m)` | value or `missing` | Package-specific stats (e.g. `:r2_within`, `:fstat`). |
+| `LaTeXTabX._regstat_ext(s::Symbol, m)` | value or `missing` | Package-specific stats (e.g. `:r2_within`, `:fstat`, the IV first-stage `:F_kp`/`:p_kp`/`:firststage_*`). Return `missing` for anything unsupported. |
 
 **Minimal example — bring in a foreign model (e.g. an R result via RCall).** A
 plain struct + a NamedTuple `coeftable` is enough; no StatsBase dependency:
@@ -365,6 +423,21 @@ latexreg(fm1, fm2; labels = Dict(...), stats = [:nobs])   # just works
 :aic :aicc :bic :loglikelihood :nullloglikelihood :deviance :nulldeviance :dof
 :dof_residual :fstat :fstat_pval`. Plus custom `"Label" => f(model)` where `f`
 receives the fitted model.
+
+**IV first-stage diagnostics** (also `stats` symbols; blank for non-IV columns and
+for backends that don't expose them, so they sit happily next to OLS columns):
+
+| Symbol | Statistic | FixedEffectModels | Regress |
+|---|---|---|---|
+| `:F_kp` / `:p_kp` | Kleibergen-Paap rk Wald \(F\) + \(p\) | `m.F_kp` / `m.p_kp` | `first_stage_F_KP(m)` |
+| `:firststage_F` / `:firststage_p` | Robust Wald first-stage \(F\) + \(p\) | (aliases KP — its only first-stage \(F\)) | `first_stage_F_robust(m)` |
+| `:firststage_F_iid` / `:firststage_p_iid` | IID first-stage \(F\) + \(p\) | — | `first_stage_F_iid(m)` |
+
+With multiple endogenous regressors, the per-endogenous robust/IID `F` is a vector
+and renders blank in a single cell; the joint `:F_kp` (a scalar) always renders.
+There is no automatic first-stage *coefficient* display — fit the first stage
+explicitly (an OLS of the endogenous variable on the instruments + exogenous
+regressors) and add it as its own column.
 
 **`latexsummary` `stats` symbols**: `:mean :std :median :q25 :q75 :min :max :n
 (:count) :sum`. Plus custom `"Label" => f(vector)`.

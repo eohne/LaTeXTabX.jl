@@ -31,7 +31,8 @@ struct TabXRow <: AbstractTabXRow
 end
 TabXRow(cells::TabXCell...) = TabXRow(collect(cells))
 
-"A horizontal rule. `kind ∈ (:top, :mid, :doublemid, :bottom)`."
+"A horizontal rule. `kind ∈ (:top, :mid, :doublemid, :bottom, :none)`; `:none`
+renders to nothing (used to omit an outer rule)."
 struct TabXRule <: AbstractTabXRow
     kind::Symbol
 end

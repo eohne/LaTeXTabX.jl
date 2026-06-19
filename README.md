@@ -57,9 +57,38 @@ Pluto/Jupyter. The [gallery](#gallery) below shows every builder typeset.
 
 **Statistics for `latexreg`** — built-ins `:nobs :r2 :adjr2 :r2_within
 :r2_mcfadden :r2_coxsnell :r2_nagelkerke :r2_deviance :aic :aicc :bic
-:loglikelihood :deviance :dof :dof_residual :fstat :fstat_pval`, plus any custom
-`"Label" => f(model)`. `latexsummary` built-ins `:mean :std :median :q25 :q75
-:min :max :n :sum`, plus custom `"Label" => f(vector)`.
+:loglikelihood :deviance :dof :dof_residual :fstat :fstat_pval`, plus the IV
+**first-stage diagnostics** `:F_kp :p_kp` (Kleibergen-Paap, from FixedEffectModels
+or Regress) and Regress's `:firststage_F :firststage_p` (robust) /
+`:firststage_F_iid :firststage_p_iid` (IID) — blank for non-IV columns — plus any
+custom `"Label" => f(model)`. `latexsummary` built-ins `:mean :std :median :q25
+:q75 :min :max :n :sum`, plus custom `"Label" => f(vector)`.
+
+**Outer rules.** Every builder takes `toprule` / `bottomrule` (default
+`:doublemid` = `\midrule\midrule`); set `:top` / `:bottom` for booktabs
+`\toprule` / `\bottomrule`, or `:none` to omit.
+
+**Coefficient selection — exact rules.** Patterns in `keep` / `drop` / `order` are
+matched per pattern: a **`String` matches a name *exactly*** (`name == pat`, not a
+substring), a **`Regex` matches by `occursin`** (substring/pattern, e.g.
+`drop=[r"Intercept"]`, `keep=[r"^x"]`), and a vector may mix the two. `keep`/`drop`
+match **raw** coefficient names; `order` (always global) matches a row's display
+**label** *or* any raw name feeding it. `labels` is a dictionary keyed by the
+**exact raw name — no regex**.
+
+**Per-column selection & coefficient merging.** `labels` / `keep` / `drop` can be
+set **per model (column)** — pass `labels` as a vector of dicts, or `keep`/`drop`
+as a vector of pattern-vectors (e.g. `keep = [[r"^x"], nothing, ["z"]]`); a single
+dict/spec still applies to all (the per-column form is recognised when *every*
+element is itself a pattern-vector or `nothing`). Coefficient **rows are keyed by
+their display label**, so different raw names relabelled to the same name *merge*
+onto one row (`Dict("x1_standard"=>"X1", "x1_nonstandard"=>"X1")` puts each model's
+value in its own column on a shared `X1` row), while the same raw name given
+different per-column labels *splits* into separate rows. A per-column `keep`/`drop`
+can also mask a coefficient out of specific columns.
+
+Full, precise rules (pattern table, per-column disambiguation, row-identity/merging,
+the Controls flag): **[`docs/REFERENCE.md`](docs/REFERENCE.md)**.
 
 **Column types.** Every builder defaults the data columns to the `Y` column type;
 pass `coltype="X"` / `"c"` / `"S"` (siunitx) / `"D{.}{.}{-1}"` (dcolumn, decimal
@@ -151,14 +180,15 @@ latexreg(m1, m2, logit;
 
 ### Spanning multi-level headers
 
-Adjacent equal labels merge into a `\multicolumn` with its own `\cmidrule`; the
-intercept is dropped and an automatic "Controls" row appears.
+Adjacent equal labels merge into a `\multicolumn` with its own `\cmidrule`.
+`size` is dropped, so the automatic "Controls" row flags the columns that
+estimated it (a dropped intercept alone never raises the flag).
 
 ![Multi-level headers](assets/T2.png)
 
 ```julia
 latexreg(m2, m3, m2, m3;
-    labels = reglabels, drop = [r"Intercept"], depvar = false,
+    labels = reglabels, drop = [r"Intercept", r"size"], depvar = false,
     number_regressions = false,
     groups = ["Subsample A" "Subsample A" "Subsample B" "Subsample B"
               "Short"       "Long"        "Short"       "Long"],
@@ -230,7 +260,10 @@ latexreg(twfe, gardner, bjs;
 
 ### Instrumental variables / k-class
 
-OLS vs 2SLS vs LIML; the estimator row reports the method and the realized κ.
+OLS vs 2SLS vs LIML; the estimator row reports the method and the realized κ. The
+first-stage Kleibergen-Paap `F` + `p` are pulled in through `stats` and stay blank
+for the OLS column (there is no automatic first-stage *coefficient* table — fit
+the first stage as its own OLS column if you want one).
 
 ![IV / k-class](assets/T7.png)
 
@@ -238,7 +271,7 @@ OLS vs 2SLS vs LIML; the estimator row reports the method and the realized κ.
 latexreg(ols, tsls, liml;
     labels    = Dict("endo" => "Investment", "x" => "Control",
                      "(Intercept)" => "Constant", "y" => "Outcome"),
-    estimator = :auto, stats = [:nobs, :r2])
+    estimator = :auto, stats = [:nobs, :r2, :F_kp, :p_kp])
 ```
 
 ### Compact fixed-effect markers

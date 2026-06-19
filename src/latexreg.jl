@@ -124,6 +124,13 @@ const _DEFAULT_STAT_LABELS = Dict{Symbol,String}(
     :dof_residual      => "Residual DOF",
     :fstat             => "\$F\$",
     :fstat_pval        => "\$F\$ \$p\$-value",
+    # IV first-stage diagnostics (extensions supply the values; blank for non-IV).
+    :F_kp              => "Kleibergen-Paap \$F\$",
+    :p_kp              => "Kleibergen-Paap \$p\$-value",
+    :firststage_F      => "First-stage \$F\$",
+    :firststage_p      => "First-stage \$p\$-value",
+    :firststage_F_iid  => "First-stage \$F\$ (IID)",
+    :firststage_p_iid  => "First-stage \$p\$-value (IID)",
 )
 
 """
@@ -134,10 +141,33 @@ StagDiDModels, Regress, or any StatsAPI `RegressionModel`). Returns a `TabXTable
 pass `file=...` to also write the `.tex`. Render with `to_latex(t)`.
 
 Key keywords:
-- `labels::AbstractDict` — map raw coefficient / response / FE names to display
-  labels (RegressionTables-style relabeling).
-- `keep` / `drop` / `order` — coefficient names/regex (String, Regex, or a vector).
-  `drop_intercept=true` also drops `(Intercept)` (off by default — intercept kept).
+- `labels` — map raw coefficient / response / FE / cluster names to display labels
+  (RegressionTables-style relabeling). Keys are matched **exactly** by raw name —
+  no regex. The dict is **partial**: only the names you list are renamed; any
+  coefficient absent from it keeps its raw name, LaTeX-escaped (`log_gdp` →
+  `log\\_gdp`). Relabelled text is taken **verbatim** (not escaped), so it may
+  contain math/markup. E.g. `labels = Dict("treat" => "Treatment")` renames only
+  `treat` and leaves `lev`, `size`, `(Intercept)`, … as-is. A single `Dict` applies
+  to every column; a **vector of `Dict`s** (one per model, `nothing` allowed)
+  relabels per column. **Coefficient rows are keyed by the display label**, so
+  different raw names that resolve to the same label *merge onto one row* (e.g.
+  `x1_standard` in one model and `x1_nonstandard` in another both relabelled to
+  `"X1"`), each column filling its own value; conversely the same raw name given
+  different labels per column splits into separate rows.
+- `keep` / `drop` — which coefficients to keep/drop, matched on **raw** names and
+  applied to all columns. Each pattern is a `String` (matched **exactly**), a
+  `Regex` (matched by `occursin`, i.e. substring/pattern — e.g. `drop=[r"Intercept"]`,
+  `keep=[r"^x"]`), or a vector mixing the two. Pass a **per-model** spec — a
+  length-`nmodels` vector whose entries are each a pattern-vector or `nothing`
+  (e.g. `keep=[[r"^x"], nothing]`) — to keep/drop **per column**: a coefficient can
+  then be masked out of specific columns even when that model estimated it (a
+  column hiding an estimated regressor is flagged in the auto `Controls` row).
+- `order` — leading row order, **always global**. Each pattern (`String` = exact,
+  `Regex` = `occursin`) is matched against each row's display label *or* any raw
+  name feeding it, so `order=["treat"]`, `order=["X1"]`, and `order=[r"treat"]` all
+  work. Remaining rows follow in first-seen order.
+- `drop_intercept=true` also drops `(Intercept)` (off by default — intercept kept).
+  A dropped intercept alone does **not** raise the `Controls` flag.
 - `below` — under each estimate: `:se` (default), `:tstat`, `:confint`, or `:none`.
 - `depvar` / `depvar_labels`, `combine_depvar`, `depvar_rule` — dependent-var header.
 - `groups` — pairs `["A" => 1:3, ...]` (model-index ranges) OR a matrix /
@@ -172,12 +202,20 @@ Key keywords:
 - `stats` — vector of stat symbols and/or `"Label" => f(model)` pairs. Built-ins:
   `:nobs :r2 :adjr2 :r2_within :r2_mcfadden :r2_coxsnell :r2_nagelkerke
   :r2_deviance :aic :aicc :bic :loglikelihood :deviance :dof :dof_residual
-  :fstat :fstat_pval`. `stat_labels` to relabel.
+  :fstat :fstat_pval`, plus IV **first-stage diagnostics** `:F_kp :p_kp`
+  (Kleibergen-Paap rk Wald \$F\$ and its \$p\$, from FixedEffectModels or
+  Regress) and, for Regress, `:firststage_F :firststage_p` (robust Wald) /
+  `:firststage_F_iid :firststage_p_iid` (IID). These are blank for non-IV columns
+  (and for backends that don't expose them), so they coexist with OLS columns.
+  `stat_labels` to relabel.
+- `toprule` / `bottomrule` — the outermost rules (default `:doublemid` =
+  `\\midrule\\midrule`); set `:top`/`:bottom` for booktabs `\\toprule`/`\\bottomrule`,
+  or `:none` to omit.
 - `extralines`, `notes`, `title`/`caption`, `label`, `float`, `width`, `colspec`,
   `digits`, `stat_digits`, `star_cutoffs`, `star_symbols`, `confint_z`, `file`.
 """
 function latexreg(models...;
-        labels::AbstractDict = Dict{String,String}(),
+        labels = Dict{String,String}(),
         keep = nothing,
         drop = nothing,
         order = nothing,
@@ -232,6 +270,8 @@ function latexreg(models...;
         colspec = nothing,
         coltype::AbstractString = "Y",
         labelcol::AbstractString = "l",
+        toprule::Symbol = :doublemid,
+        bottomrule::Symbol = :doublemid,
         file = nothing)
 
     isempty(models) && throw(ArgumentError("latexreg requires at least one model"))
@@ -239,8 +279,17 @@ function latexreg(models...;
     nm = length(mds)
     ncols = nm + 1
 
-    getlabel(k) = haskey(labels, k) ? labels[k] : latex_escape(k)
-    coefkeys = _coef_order(mds, _aspats(keep), _aspats(drop), _aspats(order), drop_intercept)
+    # `labels`, `keep`, `drop` are global by default but may be given per model
+    # (column): `labels` as a vector of dicts, `keep`/`drop` as a vector of
+    # pattern-vectors. `order` is always global. Rows are keyed by *display label*,
+    # so coefficients relabelled to the same name merge onto one row. See
+    # `_label_lookup` / `_coef_selection`.
+    labof = _label_lookup(labels, nm)
+    # `rowlabels` are the coefficient rows (display labels, merged); `colraw[i]` maps
+    # a rowlabel to the raw coefficient column `i` shows there (absent -> blank, which
+    # also covers per-model keep/drop masking); `shown[i]` is the raw names column `i`
+    # displays (for the Controls flag).
+    rowlabels, colraw, shown = _coef_selection(mds, keep, drop, order, drop_intercept, labof, nm)
 
     # per-model SE overrides (e.g. post-estimation clustered SEs for GLM):
     # recompute p-values + stars from the new SEs (normal approximation).
@@ -270,7 +319,7 @@ function latexreg(models...;
         labs = String[]
         for (i, md) in enumerate(mds)
             push!(labs, depvar_labels !== nothing ? string(depvar_labels[i]) :
-                  (haskey(labels, md.responsename) ? labels[md.responsename] : latex_escape(md.responsename)))
+                  something(labof(i, md.responsename), latex_escape(md.responsename)))
         end
         segs = combine_depvar ? _merge_equal(labs) : Tuple{String,Int}[(l, 1) for l in labs]
         cells = TabXCell[TabXCell("")]
@@ -326,12 +375,15 @@ function latexreg(models...;
 
     push!(rows, TabXRule(:mid))
 
-    # coefficient rows (estimate, with the chosen statistic on the line below)
-    for k in coefkeys
-        crow = TabXCell[TabXCell(getlabel(k))]
+    # coefficient rows (estimate, with the chosen statistic on the line below).
+    # Each row is one display label; a column prints the raw coefficient mapped to
+    # that label (or blanks — absent, or masked out by a per-model keep/drop).
+    for L in rowlabels
+        crow = TabXCell[TabXCell(L)]
         brow = TabXCell[TabXCell("")]
         for (mi, md) in enumerate(mds)
-            idx = findfirst(==(k), md.coefnames)
+            raw = get(colraw[mi], L, nothing)
+            idx = raw === nothing ? nothing : findfirst(==(raw), md.coefnames)
             if idx === nothing
                 push!(crow, TabXCell(""))
                 push!(brow, TabXCell(""))
@@ -348,7 +400,12 @@ function latexreg(models...;
 
     # fixed-effects block + controls indicator
     feinfo = _resolve_fe(fixedeffects, mds, nm)
-    controls_flags = print_controls ? Bool[!isempty(setdiff(md.coefnames, coefkeys)) for md in mds] : Bool[]
+    # A column's "Controls" flag: it estimated a *non-intercept* regressor it does
+    # not display (honours per-model keep/drop masking). A dropped intercept alone
+    # does not raise the flag.
+    controls_flags = print_controls ?
+        Bool[any(c -> !occursin(r"^\(Intercept\)$", c), setdiff(md.coefnames, shown[i]))
+             for (i, md) in enumerate(mds)] : Bool[]
     show_controls = print_controls && any(controls_flags)
     # SE-type row ("Classical"/"HC1"/"Robust"/"Clustered", per model) + a separate
     # cluster-variable row. Either can be overridden (se_labels / cluster_labels),
@@ -363,7 +420,7 @@ function latexreg(models...;
         (cluster_labels !== nothing && i <= length(cluster_labels) && cluster_labels[i] !== nothing) ?
             string(cluster_labels[i]) :
             ((md.se_kind === :cluster && !isempty(md.clusters)) ?
-                join(String[haskey(labels, c) ? labels[c] : c for c in md.clusters], cluster_join) : "")
+                join(String[something(labof(i, c), c) for c in md.clusters], cluster_join) : "")
         for (i, md) in enumerate(mds)]
     # Clustering is always surfaced when present (even if identical across every
     # column); other SE types collapse to nothing when constant.
@@ -380,7 +437,7 @@ function latexreg(models...;
             fe_style === :block &&
                 push!(rows, TabXRow(vcat(TabXCell(fe_title), [TabXCell("") for _ in 1:nm])))
             for (fename, flags) in feinfo
-                felabel = haskey(labels, fename) ? labels[fename] : fename
+                felabel = something(_label_any(labof, nm, fename), fename)
                 rowlabel = fe_style === :compact ? (felabel * fe_suffix) : ("\\hspace{2mm}" * felabel)
                 cells = TabXCell[TabXCell(rowlabel)]
                 for f in flags
@@ -433,6 +490,7 @@ function latexreg(models...;
     end
 
     push!(rows, TabXRule(:doublemid))
+    _apply_outer_rules!(rows, toprule, bottomrule)
 
     cspec = colspec === nothing ? labelcol * repeat(coltype, nm) : colspec
     cap = caption !== nothing ? caption : (title !== nothing ? title : "")
@@ -495,6 +553,47 @@ function _as_se_vector(se, coefnames)
     return Float64[float(x) for x in v]
 end
 
+# --- label resolution (global dict, or one dict per model/column) ---
+
+# Build a lookup `(model_index, raw_name) -> display label or nothing`. `labels` is
+# a single `AbstractDict` (applied to every column) or a vector of per-model dicts
+# (`nothing` = no relabeling for that column). Used for coefficient, response,
+# fixed-effect and cluster names. Coefficient rows are keyed by the resolved label,
+# so two different raw names that map to the same label merge onto one row — even
+# when the mapping differs across columns (per-model dicts).
+function _label_lookup(labels, nm)
+    if labels isa AbstractDict
+        d = Dict{String,String}(string(k) => string(v) for (k, v) in labels)
+        return (_i, name) -> get(d, string(name), nothing)
+    elseif labels isa AbstractVector
+        length(labels) == nm ||
+            throw(ArgumentError("per-model `labels` needs one Dict per model ($(nm)); got $(length(labels))"))
+        dicts = Dict{String,String}[]
+        for e in labels
+            if e === nothing
+                push!(dicts, Dict{String,String}())
+            elseif e isa AbstractDict
+                push!(dicts, Dict{String,String}(string(k) => string(v) for (k, v) in e))
+            else
+                throw(ArgumentError("each per-model `labels` entry must be a Dict or `nothing`"))
+            end
+        end
+        return (i, name) -> get(dicts[i], string(name), nothing)
+    else
+        throw(ArgumentError("`labels` must be a Dict (global) or a vector of per-model Dicts"))
+    end
+end
+
+# First per-model label found for `name` across columns — for names shown once for
+# the whole table (e.g. a fixed-effect row spanning all columns).
+function _label_any(labof, nm, name)
+    for i in 1:nm
+        l = labof(i, name)
+        l === nothing || return l
+    end
+    return nothing
+end
+
 # --- coefficient selection / ordering ---
 _aspats(x) = x === nothing ? nothing : (x isa AbstractVector ? collect(x) : [x])
 
@@ -502,36 +601,113 @@ _matches(name::AbstractString, pat::AbstractString) = name == pat
 _matches(name::AbstractString, pat::Regex) = occursin(pat, name)
 _matches(name::AbstractString, pat) = name == string(pat)
 
-function _coef_order(mds, keep, drop, order, drop_intercept)
-    allnames = String[]
-    for md in mds, k in md.coefnames
-        k in allnames || push!(allnames, k)
-    end
+# Is `spec` a *per-model* keep/drop (one entry per model)? Yes iff it is a
+# length-`nm` vector whose entries are each a pattern-vector or `nothing` (and at
+# least one is a vector). A flat list of bare patterns (`["x", r"y"]`) stays
+# global — the element type, not the length, disambiguates.
+_is_permodel_spec(spec, nm) =
+    spec isa AbstractVector && length(spec) == nm &&
+    all(e -> e === nothing || e isa AbstractVector, spec) &&
+    any(e -> e isa AbstractVector, spec)
 
+# Broadcast a keep/drop argument to one spec per model: the per-model entries when
+# given that way, else the same global spec repeated.
+function _broadcast_spec(spec, nm)
+    _is_permodel_spec(spec, nm) && return Any[spec[i] for i in 1:nm]
+    return Any[spec for _ in 1:nm]
+end
+
+# Fail loudly on a per-column-shaped spec with the wrong length — its elements are
+# all pattern-vectors / `nothing` (so clearly per-column intent) but it does not have
+# one entry per model. Without this it would silently be read as a global flat list
+# and match nothing.
+function _check_spec_shape(spec, nm, which)
+    spec isa AbstractVector && !isempty(spec) &&
+        all(e -> e === nothing || e isa AbstractVector, spec) &&
+        any(e -> e isa AbstractVector, spec) && length(spec) != nm &&
+        throw(ArgumentError(
+            "per-model `$(which)` must have exactly one entry per model ($(nm)); got $(length(spec))"))
+    return nothing
+end
+
+# Keep + drop one name list (keep/drop each `nothing`, a pattern, or a vector of
+# patterns), matching raw coefficient names. Ordering is handled globally, later,
+# on display labels. `keep` selects in pattern order; the global path relies on this
+# to keep its historical union ordering.
+function _select_drop(names, keep, drop, drop_intercept)
+    keep = _aspats(keep); drop = _aspats(drop)
     sel = if keep === nothing
-        copy(allnames)
+        collect(String, names)
     else
         acc = String[]
-        for pat in keep, k in allnames
+        for pat in keep, k in names
             (_matches(k, pat) && !(k in acc)) && push!(acc, k)
         end
         acc
     end
-
     droppats = Any[]
     drop === nothing || append!(droppats, drop)
     drop_intercept && push!(droppats, r"^\(Intercept\)$")
     isempty(droppats) || (sel = String[k for k in sel if !any(p -> _matches(k, p), droppats)])
+    return sel
+end
 
-    if order !== nothing
-        front = String[]
-        for pat in order, k in sel
-            (_matches(k, pat) && !(k in front)) && push!(front, k)
+# Resolve the coefficient rows (keyed by *display label*, so coefficients relabelled
+# to the same name — even via different raw names in different columns — merge onto
+# one row) and the per-column raw-name map.
+#
+# `keep`/`drop` are global or per-model (matched on raw coefficient names). `order`
+# is always global and is matched against each row's display label *or* any raw name
+# feeding it, so `order=["treat"]` (a raw name) and `order=["X1"]` (a merged label)
+# both work. With all-global keep/drop the row set/order is the historical union;
+# per-model keep/drop selects per column (masking a coefficient out of some columns).
+#
+# Returns `(rowlabels, colraw, shown)`:
+#   rowlabels :: Vector{String}              ordered display labels (one per row)
+#   colraw    :: Vector{Dict{String,String}} per model, rowlabel -> raw coef shown
+#   shown     :: Vector{Vector{String}}      per model, raw coef names it displays
+function _coef_selection(mds, keep, drop, order, drop_intercept, labof, nm)
+    _check_spec_shape(keep, nm, "keep")
+    _check_spec_shape(drop, nm, "drop")
+    coefsets = [Set(md.coefnames) for md in mds]
+    if _is_permodel_spec(keep, nm) || _is_permodel_spec(drop, nm)
+        keeps = _broadcast_spec(keep, nm)
+        drops = _broadcast_spec(drop, nm)
+        shown = [_select_drop(mds[i].coefnames, keeps[i], drops[i], drop_intercept) for i in 1:nm]
+        raw_seq = Tuple{Int,String}[(i, r) for i in 1:nm for r in shown[i]]
+    else
+        allnames = String[]
+        for md in mds, k in md.coefnames
+            k in allnames || push!(allnames, k)
         end
-        sel = vcat(front, String[k for k in sel if !(k in front)])
+        g = _select_drop(allnames, keep, drop, drop_intercept)   # union, keep-ordered
+        shown = [String[r for r in g if r in coefsets[i]] for i in 1:nm]
+        raw_seq = Tuple{Int,String}[(i, r) for r in g for i in 1:nm if r in coefsets[i]]
     end
 
-    return sel
+    rowlabels = String[]
+    rowraws = Dict{String,Vector{String}}()           # label -> raw names feeding it
+    colraw = [Dict{String,String}() for _ in 1:nm]
+    for (i, r) in raw_seq
+        L = something(labof(i, r), latex_escape(r))
+        if !haskey(rowraws, L)
+            push!(rowlabels, L); rowraws[L] = String[]
+        end
+        r in rowraws[L] || push!(rowraws[L], r)
+        colraw[i][L] = r
+    end
+
+    # global `order`, matched on the display label or any raw name feeding the row
+    ordpats = _aspats(order)
+    if ordpats !== nothing
+        front = String[]
+        for pat in ordpats, L in rowlabels
+            ((_matches(L, pat) || any(rr -> _matches(rr, pat), rowraws[L])) && !(L in front)) &&
+                push!(front, L)
+        end
+        rowlabels = vcat(front, String[L for L in rowlabels if !(L in front)])
+    end
+    return rowlabels, colraw, shown
 end
 
 function _resolve_fe(fixedeffects, mds, nm)

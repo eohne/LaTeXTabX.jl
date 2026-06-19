@@ -22,6 +22,8 @@ Keywords:
 - `vars` — variables to include when `panels` is not given (default: all numeric).
 - `labels` — `Dict` of variable display labels; `stat_labels` for the header.
 - `digits` (default 2), `commas` (thousands separators, default true).
+- `toprule` / `bottomrule` — outermost rules (default `:doublemid`; use
+  `:top`/`:bottom` for booktabs `\\toprule`/`\\bottomrule`, `:none` to omit).
 - plus `notes`, `title`/`caption`, `label`, `float`, `width`, `colspec`, `file`.
 """
 function latexsummary(data;
@@ -42,6 +44,8 @@ function latexsummary(data;
         colspec = nothing,
         coltype::AbstractString = "Y",
         labelcol::AbstractString = "l",
+        toprule::Symbol = :doublemid,
+        bottomrule::Symbol = :doublemid,
         file = nothing)
 
     allnames, coltab = _summary_data(data)
@@ -86,6 +90,7 @@ function latexsummary(data;
         end
         push!(rows, TabXRule(:doublemid))
     end
+    _apply_outer_rules!(rows, toprule, bottomrule)
 
     cspec = colspec === nothing ? labelcol * repeat(coltype, nstat) : colspec
     cap = caption !== nothing ? caption : (title !== nothing ? title : "")

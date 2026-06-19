@@ -26,6 +26,8 @@ Keywords:
   labels independently of the row labels in `labels`.
 - `digits` (default 3), `diagonal` (show the `1.000` diagonal), `lower` (lower
   triangle only).
+- `toprule` / `bottomrule` — outermost rules (default `:doublemid`; use
+  `:top`/`:bottom` for booktabs `\\toprule`/`\\bottomrule`, `:none` to omit).
 - plus `notes`, `title`/`caption`, `label`, `float`, `width`, `colspec`, `file`.
 """
 function latexcorr(data;
@@ -51,6 +53,8 @@ function latexcorr(data;
         colspec = nothing,
         coltype::AbstractString = "Y",
         labelcol::AbstractString = "l",
+        toprule::Symbol = :doublemid,
+        bottomrule::Symbol = :doublemid,
         file = nothing)
 
     # variable order + (optional) row-panel grouping
@@ -116,6 +120,7 @@ function latexcorr(data;
         end
         push!(rows, TabXRule(:doublemid))
     end
+    _apply_outer_rules!(rows, toprule, bottomrule)
 
     cspec = colspec === nothing ? labelcol * repeat(coltype, p) : colspec
     cap = caption !== nothing ? caption : (title !== nothing ? title : "")

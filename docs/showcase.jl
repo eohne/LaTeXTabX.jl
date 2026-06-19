@@ -66,10 +66,10 @@ emit("Regression tables", "Main results — OLS and Logit side by side",
         notes         = ["Standard errors in parentheses. \$^{*}p<0.1\$, \$^{**}p<0.05\$, \$^{***}p<0.01\$."]))
 
 emit("Regression tables", "Spanning multi-level headers",
-    "Adjacent equal labels merge into a \\texttt{\\textbackslash multicolumn} with a \\texttt{\\textbackslash cmidrule}; intercept dropped, automatic \"Controls\" row.",
+    "Adjacent equal labels merge into a \\texttt{\\textbackslash multicolumn} with a \\texttt{\\textbackslash cmidrule}; \\texttt{size} is dropped, so the automatic \"Controls\" row flags the columns (\\texttt{m3}) that estimated it. A dropped intercept alone never raises the flag.",
     latexreg(m2, m3, m2, m3;
         labels  = reglabels,
-        drop    = [r"Intercept"],
+        drop    = [r"Intercept", r"size"],
         depvar  = false,
         number_regressions = false,
         groups  = ["Subsample A" "Subsample A" "Subsample B" "Subsample B"
@@ -150,12 +150,12 @@ tsls = Regress.iv(Regress.TSLS(), ivd, @formula(y ~ x + (endo ~ z1 + z2)))
 liml = Regress.iv(Regress.LIML(), ivd, @formula(y ~ x + (endo ~ z1 + z2)))
 
 emit("Regression tables", "Instrumental variables / k-class",
-    "OLS vs 2SLS vs LIML; the estimator row reports the method and the realized \$\\kappa\$ for LIML.",
+    "OLS vs 2SLS vs LIML; the estimator row reports the method and the realized \$\\kappa\$ for LIML. The first-stage Kleibergen-Paap \$F\$ + \$p\$ are added via \\texttt{stats} and stay blank for the OLS column.",
     latexreg(ols, tsls, liml;
         labels    = Dict("endo" => "Investment", "x" => "Control", "(Intercept)" => "Constant", "y" => "Outcome"),
         estimator = :auto,
-        stats     = [:nobs, :r2],
-        notes     = ["Instruments: z1, z2."]))
+        stats     = [:nobs, :r2, :F_kp, :p_kp],
+        notes     = ["Instruments: z1, z2. First-stage diagnostics are blank where the model has no first stage."]))
 
 emit("Regression tables", "Compact fixed-effect markers",
     "\\texttt{fe\\_style=:compact} folds the FE label into the row; ticks for \"yes\", blank for \"no\".",

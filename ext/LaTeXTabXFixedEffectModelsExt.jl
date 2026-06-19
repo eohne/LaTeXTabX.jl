@@ -9,9 +9,11 @@ catch
     ""
 end
 
-# IV models carry first-stage (Kleibergen-Paap) diagnostics; use that to flag 2SLS.
+# IV models carry a first-stage (Kleibergen-Paap) F; it is `NaN` for non-IV fits,
+# so a finite value flags 2SLS. (`F_kp` is always a `Float64` field — comparing it
+# to `nothing` is always true, hence the explicit `isnan`.)
 _estimator(m::FixedEffectModel) = try
-    (hasproperty(m, :F_kp) && m.F_kp !== nothing) ? "IV (2SLS)" : "OLS"
+    isnan(m.F_kp) ? "OLS" : "IV (2SLS)"
 catch
     "OLS"
 end
@@ -48,12 +50,18 @@ catch
     String[]
 end
 
-# Package-specific statistics: within-R², overall F-stat and its p-value.
-# (Wrapped by the core `_regstat` try/catch, so a missing field -> blank.)
+# Package-specific statistics: within-R², overall F-stat and its p-value, plus the
+# IV first-stage Kleibergen-Paap rk Wald F and its p-value (`F_kp`/`p_kp`). The KP
+# F is FixedEffectModels' only first-stage diagnostic, so `:firststage_F`/`_p`
+# alias it. Both are `NaN` for non-IV fits -> `missing` -> a blank cell, so the
+# rows are simply ignored for OLS columns. (Wrapped by the core `_regstat`
+# try/catch, so a missing field -> blank.)
 function _regstat_ext(s::Symbol, m::FixedEffectModel)
     s === :r2_within && return m.r2_within
     s === :fstat && return m.F
     s === :fstat_pval && return m.p
+    (s === :F_kp || s === :firststage_F) && return isnan(m.F_kp) ? missing : m.F_kp
+    (s === :p_kp || s === :firststage_p) && return isnan(m.p_kp) ? missing : m.p_kp
     return missing
 end
 

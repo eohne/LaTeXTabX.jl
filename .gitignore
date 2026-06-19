@@ -1,8 +1,8 @@
 # --- Nested package fork: keep it in its OWN repo, never track/push it here ---
 RegressionTables_TabX.jl/
 
-# --- Claude Code: personal/local settings (machine-specific paths) ---
-.claude/settings.local.json
+# --- Claude Code: never track the agent workspace (settings, local config) ---
+.claude/
 
 # --- Julia ---
 *.jl.cov

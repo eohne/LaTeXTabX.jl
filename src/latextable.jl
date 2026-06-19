@@ -15,8 +15,9 @@ Keywords:
   whole header row.
 - `digits` (default 3), `commas` (thousands separators, default false),
   `escape` (escape string cells, default true).
-- `colspec` (default `l` + `Y`×(ncols-1)), plus `notes`, `title`/`caption`,
-  `label`, `float`, `width`, `file`.
+- `colspec` (default `l` + `Y`×(ncols-1)), `toprule` / `bottomrule` (outermost
+  rules; default `:doublemid`, or `:top`/`:bottom`/`:none`), plus `notes`,
+  `title`/`caption`, `label`, `float`, `width`, `file`.
 """
 function latextable(data;
         vars = nothing,
@@ -35,6 +36,8 @@ function latextable(data;
         colspec = nothing,
         coltype::AbstractString = "Y",
         labelcol::AbstractString = "l",
+        toprule::Symbol = :doublemid,
+        bottomrule::Symbol = :doublemid,
         file = nothing)
 
     nms, cols = _table_columns(data, vars)
@@ -55,6 +58,7 @@ function latextable(data;
         push!(rows, TabXRow(TabXCell[TabXCell(_table_cell(cols[j][r], digits, commas, escape)) for j in 1:p]))
     end
     push!(rows, TabXRule(:doublemid))
+    _apply_outer_rules!(rows, toprule, bottomrule)
 
     cspec = colspec === nothing ? labelcol * repeat(coltype, max(p - 1, 0)) : colspec
     cap = caption !== nothing ? caption : (title !== nothing ? title : "")

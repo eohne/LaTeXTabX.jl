@@ -1,7 +1,7 @@
 module LaTeXTabXRegressExt
 
 using Regress
-import LaTeXTabX: _estimator, _se_info
+import LaTeXTabX: _estimator, _se_info, _regstat_ext
 
 # Coefficients/SEs come through the generic StatsAPI `coeftable` path. Here we
 # label the estimator; the K-class method (TSLS/LIML/Fuller) is read from the
@@ -56,5 +56,30 @@ end
 
 _se_info(m::Regress.OLSEstimator) = _regress_se_info(m)
 _se_info(m::Regress.IVEstimator) = _regress_se_info(m)
+
+# IV first-stage diagnostics. Regress exposes three first-stage F-tests, each
+# returning a `FirstStageFTest` with `.stat`/`.p`: the Kleibergen-Paap rk Wald F
+# (`:F_kp`/`:p_kp`), the robust Wald F (`:firststage_F`/`:firststage_p`), and the
+# IID/homoskedastic F (`:firststage_F_iid`/`:firststage_p_iid`). Only IV models
+# dispatch here; OLS models hit the generic `_regstat_ext` (missing), and any
+# error (e.g. a model fit without first-stage data) is turned into `missing` by
+# the core `_regstat` wrapper -> a blank cell.
+function _regstat_ext(s::Symbol, m::Regress.IVEstimator)
+    s === :F_kp             && return _fs_scalar(Regress.first_stage_F_KP(m).stat)
+    s === :p_kp             && return _fs_scalar(Regress.first_stage_F_KP(m).p)
+    s === :firststage_F     && return _fs_scalar(Regress.first_stage_F_robust(m).stat)
+    s === :firststage_p     && return _fs_scalar(Regress.first_stage_F_robust(m).p)
+    s === :firststage_F_iid && return _fs_scalar(Regress.first_stage_F_iid(m).stat)
+    s === :firststage_p_iid && return _fs_scalar(Regress.first_stage_F_iid(m).p)
+    return missing
+end
+
+# A first-stage F/p is a scalar for a single endogenous regressor (and for the
+# joint KP statistic); with several endogenous regressors it is a per-endogenous
+# vector, which can't go in one cell -> collapse a length-1 vector and otherwise
+# return `missing`.
+_fs_scalar(x::Real) = float(x)
+_fs_scalar(x::AbstractVector) = length(x) == 1 ? float(x[1]) : missing
+_fs_scalar(::Any) = missing
 
 end # module

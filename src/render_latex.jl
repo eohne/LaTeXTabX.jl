@@ -19,7 +19,8 @@ function to_latex(t::TabXTable)
     end
     println(io, "\\begin{tabularx}{$(t.width)}{$(t.colspec)}")
     for r in t.rows
-        println(io, _render_row(r, t.ncols))
+        line = _render_row(r, t.ncols)
+        isempty(line) || println(io, line)   # a :none rule renders to "" and is skipped
     end
     for note in t.notes
         println(io, "    \\multicolumn{$(t.ncols)}{l}{\\scriptsize \\textit{$(note)}} \\\\")
@@ -47,6 +48,7 @@ function _render_row(r::TabXRule, ::Int)
     r.kind === :mid       && return "    \\midrule"
     r.kind === :doublemid && return "    \\midrule\\midrule"
     r.kind === :bottom    && return "    \\bottomrule"
+    r.kind === :none      && return ""
     return "    \\midrule"
 end
 
@@ -54,6 +56,36 @@ _render_row(r::TabXCmidRule, ::Int) =
     "    " * join(["\\cmidrule(lr){$(a)-$(b)}" for (a, b) in r.spans], " ")
 
 _render_row(r::TabXRaw, ::Int) = r.latex
+
+# Valid rule kinds for the `toprule` / `bottomrule` builder keywords (and the IR).
+const _RULE_KINDS = (:top, :mid, :doublemid, :bottom, :none)
+
+# Validate a `toprule`/`bottomrule` value, returning it. `:doublemid` is the
+# house default; `:top`/`:bottom` give the booktabs \toprule/\bottomrule, and
+# `:none` omits the outer rule entirely.
+function _check_rule(kind::Symbol)
+    kind in _RULE_KINDS ||
+        throw(ArgumentError("rule kind :$(kind) not recognised — use one of $(_RULE_KINDS)"))
+    return kind
+end
+
+"""
+    _apply_outer_rules!(rows, toprule, bottomrule)
+
+Swap the first and last horizontal rules of a freshly built row vector for the
+requested `toprule` / `bottomrule` kinds (default `:doublemid` preserves the
+house `\\midrule\\midrule`; `:none` omits the rule). Every builder calls this so
+the outer rules are overridable without touching the inner separators. Returns
+`rows`.
+"""
+function _apply_outer_rules!(rows, toprule::Symbol, bottomrule::Symbol)
+    _check_rule(toprule); _check_rule(bottomrule)
+    idxs = findall(r -> r isa TabXRule, rows)
+    isempty(idxs) && return rows
+    rows[last(idxs)] = TabXRule(bottomrule)        # bottom-most rule
+    first(idxs) == last(idxs) || (rows[first(idxs)] = TabXRule(toprule))  # top-most rule
+    return rows
+end
 
 """
     write_latex(path, t::TabXTable) -> path

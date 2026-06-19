@@ -27,6 +27,8 @@ Keywords:
 - `panel_format` — function turning a panel label into LaTeX (default italic).
 - `digits` — decimals for numeric entries (default 3).
 - `ncols` — column count (inferred from `header` or the widest row if omitted).
+- `toprule` / `bottomrule` — outermost rules (default `:doublemid`; use
+  `:top`/`:bottom` for booktabs `\\toprule`/`\\bottomrule`, `:none` to omit).
 - plus `notes`, `title`/`caption`, `label`, `float`, `width`, `colspec`, `file`.
 """
 function latexpanel(panels;
@@ -45,6 +47,8 @@ function latexpanel(panels;
         label = nothing,
         float::Bool = false,
         position::AbstractString = "htb",
+        toprule::Symbol = :doublemid,
+        bottomrule::Symbol = :doublemid,
         file = nothing)
 
     plist = _normalize_panels(panels)
@@ -79,6 +83,7 @@ function latexpanel(panels;
     end
 
     push!(rows, TabXRule(:doublemid))
+    _apply_outer_rules!(rows, toprule, bottomrule)
 
     cspec = colspec !== nothing ? colspec : labelcol * repeat(coltype, nc - 1)
     cap = caption !== nothing ? caption : (title !== nothing ? title : "")
