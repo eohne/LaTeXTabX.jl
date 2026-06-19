@@ -211,6 +211,9 @@ Key keywords:
 - `toprule` / `bottomrule` — the outermost rules (default `:doublemid` =
   `\\midrule\\midrule`); set `:top`/`:bottom` for booktabs `\\toprule`/`\\bottomrule`,
   or `:none` to omit.
+- `commas` — thousands separator for integer statistics (`N`, DOF), **on by
+  default** (`true` = `,`; a separator string, or `false`/`""` to disable).
+  Coefficient values are not separated.
 - `extralines`, `notes`, `title`/`caption`, `label`, `float`, `width`, `colspec`,
   `digits`, `stat_digits`, `star_cutoffs`, `star_symbols`, `confint_z`, `file`.
 """
@@ -239,6 +242,7 @@ function latexreg(models...;
         stat_labels::AbstractDict = _DEFAULT_STAT_LABELS,
         digits::Integer = 3,
         stat_digits::Integer = 3,
+        commas = true,
         below::Symbol = :se,
         confint_z::Real = 1.959964,
         combine_depvar::Bool = true,
@@ -475,7 +479,7 @@ function latexreg(models...;
             cells = TabXCell[TabXCell(_reg_statlabel(s, stat_labels))]
             for md in mds
                 v = s isa Pair ? _safe_apply(last(s), md.model) : _regstat(s, md.model)
-                push!(cells, TabXCell(_fmt_regstat(s, v; digits=stat_digits)))
+                push!(cells, TabXCell(_fmt_regstat(s, v; digits=stat_digits, commas=commas)))
             end
             push!(rows, TabXRow(cells))
         end
@@ -511,10 +515,10 @@ _reg_statlabel(s, labels) = string(s)
 
 _safe_apply(f, m) = try f(m) catch; missing end
 
-function _fmt_regstat(s, v; digits)
+function _fmt_regstat(s, v; digits, commas=true)
     v === missing && return ""
     (s isa Symbol && (s === :nobs || s === :dof || s === :dof_residual || s === :dof_fes)) &&
-        return fmt_integer(v; commas=true)
+        return fmt_integer(v; commas=commas)
     return fmt_number(float(v); digits=digits)
 end
 

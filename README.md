@@ -359,6 +359,8 @@ Column names as the header, **no row-number column** (the thing
 latextable(first(select(df, [:firm, :year, :treat, :roa]), 5);
     labels = Dict("firm" => "Firm", "year" => "Year", "treat" => "Treatment", "roa" => "ROA"),
     digits = 3)
+# latextable keeps thousands separators OFF by default (raw years/IDs); opt in
+# per column with e.g. `commas = [:population, :revenue]`.
 ```
 
 ### Fully hand-built multi-panel table — `latexpanel` / `panel`

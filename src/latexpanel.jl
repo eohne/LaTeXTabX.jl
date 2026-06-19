@@ -25,7 +25,9 @@ Keywords:
 - `header` — column header labels (excluding the row-label column); adds a header
   row + rule. `header_align` (default `:c`).
 - `panel_format` — function turning a panel label into LaTeX (default italic).
-- `digits` — decimals for numeric entries (default 3).
+- `digits` — decimals for numeric entries (default 3). `commas` — thousands
+  separators for numeric entries, **on by default** (`true` = `,`; a separator
+  string or `false`/`""` to change/disable). String entries pass through verbatim.
 - `ncols` — column count (inferred from `header` or the widest row if omitted).
 - `toprule` / `bottomrule` — outermost rules (default `:doublemid`; use
   `:top`/`:bottom` for booktabs `\\toprule`/`\\bottomrule`, `:none` to omit).
@@ -36,6 +38,7 @@ function latexpanel(panels;
         header_align::Symbol = :c,
         panel_format = s -> "\\textit{$(s)}",
         digits::Integer = 3,
+        commas = true,
         ncols = nothing,
         colspec = nothing,
         coltype::AbstractString = "Y",
@@ -77,7 +80,7 @@ function latexpanel(panels;
             elseif r isa AbstractTabXRow
                 push!(rows, r)
             else
-                push!(rows, TabXRow(_panel_row_cells(r, nc, digits)))
+                push!(rows, TabXRow(_panel_row_cells(r, nc, digits, commas)))
             end
         end
     end
@@ -108,13 +111,13 @@ function _normalize_panels(panels)
     return out
 end
 
-function _panel_row_cells(r, nc, digits)
+function _panel_row_cells(r, nc, digits, commas=false)
     cells = TabXCell[]
     for v in collect(r)
         if v isa TabXCell
             push!(cells, v)
         elseif v isa Number
-            push!(cells, TabXCell(fmt_number(v; digits=digits)))
+            push!(cells, TabXCell(fmt_number(v; digits=digits, commas=commas)))
         else
             push!(cells, TabXCell(string(v)))
         end

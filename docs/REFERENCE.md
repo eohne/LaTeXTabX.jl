@@ -222,6 +222,7 @@ latexreg(m1, m2; keep = [[r"^lev"], nothing])
 | `stats` | `[:nobs, :adjr2]` | Built-in symbols (§9) and/or `"Label" => f(model)` pairs. |
 | `stat_labels` | `AbstractDict` | Override the default symbol→label map. |
 | `stat_digits` | `Integer` = `3` | Decimals for statistics. |
+| `commas` | `true` | Thousands separator for **integer** stats (`N`, DOF). `true`→`,`, `false`/`""`→off, or a separator string. Coefficient values are not separated. |
 | `extralines` | `nothing` | Extra rows: each a vector of cells (`["Sample","Full","Full"]`), placed after the stats block. |
 
 ### Table chrome & output
@@ -257,7 +258,7 @@ statistic.
 | `labels` | `Dict()` | Variable display labels. |
 | `stat_labels` | builtin | Header labels for stats. |
 | `digits` | `2` | Decimals. |
-| `commas` | `true` | Thousands separators. |
+| `commas` | `true` | Thousands separator (**on**). `true`→`,`, `false`/`""`→off, or any separator string (`" "`, `"\,"`). |
 | + `notes`, `title`/`caption`, `label`, `float`, `position`, `width`, `colspec`, `coltype`, `labelcol`, `file` | | as in `latexreg`. |
 
 ### `latexcorr(data; kwargs...)` — correlation matrix
@@ -288,7 +289,7 @@ Column names as the header, rows as the body, **no row-number column**.
 | `header` | `nothing` | Override the whole header row (else `labels`/names). |
 | `labels` | `Dict()` | Column display labels. |
 | `digits` | `3` | Decimals for `Real`s. |
-| `commas` | `false` | Thousands separators. |
+| `commas` | `false` | Thousands separator, **off by default** (raw data may hold years/IDs). Global: `true`/`,`, `false`/`""`, or a separator string. **Per-column:** a collection of column names to separate (`[:pop, :revenue]`) or a `Dict` `name => Bool/separator`; unlisted columns stay off. |
 | `escape` | `true` | Escape `&%#_` in string cells. (`Bool`→`true`/`false` text, `Integer` kept exact.) |
 | + chrome/output keywords | | as above. |
 
@@ -306,6 +307,7 @@ inside a panel; short rows are padded with blanks.
 | `header_align` | `:c` | Header alignment. |
 | `panel_format` | `s -> "\\textit{$(s)}"` | Function turning a panel label into LaTeX. |
 | `digits` | `3` | Decimals for numeric entries. |
+| `commas` | `true` | Thousands separator for numeric entries (**on**). `true`→`,`, `false`/`""`→off, or a separator string. |
 | `ncols` | `nothing` | Column count (inferred from `header`/widest row if omitted). |
 | + `colspec`, `coltype`, `labelcol`, `width`, `notes`, `title`/`caption`, `label`, `float`, `position`, `file` | | as above. |
 

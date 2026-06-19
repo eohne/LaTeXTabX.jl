@@ -204,7 +204,7 @@ emit("Correlation tables", "Grouped columns, lower triangle",
 
 # ==================================================== Section: Plain & panels ====
 emit("Plain tables and hand-built panels", "A DataFrame, printed cleanly",
-    "Column names as the header, no row-number column; integers stay integers, strings are escaped.",
+    "Column names as the header, no row-number column; integers stay integers, strings are escaped. \\texttt{latextable} keeps separators off by default (raw years/IDs); opt in per column with e.g. \\texttt{commas=[:pop]}.",
     latextable(first(select(df, [:firm, :year, :treat, :roa]), 5);
         labels = Dict("firm" => "Firm", "year" => "Year", "treat" => "Treatment", "roa" => "ROA"),
         digits = 3))

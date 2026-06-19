@@ -4,34 +4,46 @@
 """
     fmt_number(x; digits=3, commas=false)
 
-Format a real number with a fixed number of decimal places. With `commas=true`,
-insert thousands separators into the integer part. `missing`/`NaN` -> "".
+Format a real number with a fixed number of decimal places. `commas` controls the
+thousands separator inserted into the integer part: `true` uses `,`, `false`
+(default) inserts none, or pass any separator string (e.g. `" "`, `"\\,"`, or `""`
+to disable). `missing`/`NaN` -> "".
 """
-function fmt_number(x::Real; digits::Integer=3, commas::Bool=false)
+function fmt_number(x::Real; digits::Integer=3, commas=false)
     (x isa AbstractFloat && isnan(x)) && return ""
     s = Printf.format(Printf.Format("%.$(digits)f"), float(x))
     # normalize negative zero ("-0.000" -> "0.000")
     if startswith(s, "-") && all(c -> c == '0' || c == '.', s[2:end])
         s = s[2:end]
     end
-    return commas ? _add_commas(s) : s
+    return _add_commas(s, _thousands_sep(commas))
 end
 fmt_number(::Missing; kwargs...) = ""
 
 """
     fmt_integer(x; commas=true)
 
-Format a number as an integer (rounded), with optional thousands separators.
+Format a number as an integer (rounded). `commas` sets the thousands separator:
+`true` (default) uses `,`, `false` none, or any separator string (`""` disables).
 """
-function fmt_integer(x::Real; commas::Bool=true)
+function fmt_integer(x::Real; commas=true)
     s = string(round(Int, x))
-    return commas ? _add_commas(s) : s
+    return _add_commas(s, _thousands_sep(commas))
 end
 fmt_integer(::Missing; kwargs...) = ""
 
-# Insert thousands separators into the integer part of a numeric string,
-# preserving a leading sign and any decimal fraction.
-function _add_commas(s::AbstractString)
+# Resolve a `commas` argument to a separator string: `true` -> ",", `false` -> "",
+# or a user-supplied separator string verbatim (`""` disables). Lets every builder's
+# `commas` keyword accept the historical Bool or a custom separator.
+_thousands_sep(c::Bool) = c ? "," : ""
+_thousands_sep(c::AbstractString) = String(c)
+_thousands_sep(c) = throw(ArgumentError(
+    "`commas` must be a Bool or a separator String (e.g. \",\", \" \", \"\"); got $(typeof(c))"))
+
+# Insert `sep` as a thousands separator into the integer part of a numeric string,
+# preserving a leading sign and any decimal fraction. Empty `sep` -> unchanged.
+function _add_commas(s::AbstractString, sep::AbstractString=",")
+    isempty(sep) && return String(s)
     neg = startswith(s, "-")
     body = neg ? s[2:end] : s
     if occursin('.', body)
@@ -47,7 +59,7 @@ function _add_commas(s::AbstractString)
         print(buf, c)
         rem = n - i
         if rem > 0 && rem % 3 == 0
-            print(buf, ',')
+            print(buf, sep)
         end
     end
     return (neg ? "-" : "") * String(take!(buf)) * frac

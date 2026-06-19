@@ -21,7 +21,8 @@ Keywords:
   group variables under labelled panels; default is one ungrouped block.
 - `vars` — variables to include when `panels` is not given (default: all numeric).
 - `labels` — `Dict` of variable display labels; `stat_labels` for the header.
-- `digits` (default 2), `commas` (thousands separators, default true).
+- `digits` (default 2), `commas` — thousands separators, **on by default** (`true`
+  = `,`); pass a separator string (`" "`, `"\\,"`) or `false`/`""` to disable.
 - `toprule` / `bottomrule` — outermost rules (default `:doublemid`; use
   `:top`/`:bottom` for booktabs `\\toprule`/`\\bottomrule`, `:none` to omit).
 - plus `notes`, `title`/`caption`, `label`, `float`, `width`, `colspec`, `file`.
@@ -33,7 +34,7 @@ function latexsummary(data;
         labels::AbstractDict = Dict{String,String}(),
         stat_labels::AbstractDict = _SUMMARY_STAT_LABELS,
         digits::Integer = 2,
-        commas::Bool = true,
+        commas = true,
         notes = String[],
         title = nothing,
         caption = nothing,
